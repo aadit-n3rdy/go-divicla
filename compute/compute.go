@@ -88,7 +88,7 @@ func tensorToWriter(te *types.Tensor, wr *bufio.Writer) {
 
 func (c *Compute) RunController() {
 	c.committed = 0.0
-	for true {
+	for {
 		if c.committed < 1.0 {
 			var tmp int
 			var node ot.OrcNode
@@ -114,8 +114,15 @@ func (c *Compute) RunController() {
 				}, &accepted)
 				if err != nil {
 					fmt.Println("Error registering stream: ", err)
-				} else {
-					if accepted > 0 {
+				} else if accepted > 0 {
+					sd, ok := c.sources[node.ID]
+					if ok {
+						// already exists
+						sourceClient.Close()
+						sd.Commitment += accepted
+						c.sources[node.ID] = sd
+						fmt.Println("Increased commitment with source")
+					} else {
 						c.sources[node.ID] = SourceDetails{Addr: node.Addr, Client: sourceClient, Commitment: accepted}
 						c.committed += accepted
 						fmt.Println("Registered with source")

@@ -23,14 +23,15 @@ type Stream struct {
 }
 
 type Source struct {
-	inpTensor  types.Tensor
-	srcID      string
-	orcAddr    string
-	srcAddr    string
-	deficit    float32
-	totalUnits float32
-	streams    map[string]Stream
-	orc        *rpc.Client
+	inpTensor   types.Tensor
+	srcID       string
+	orcAddr     string
+	srcAddr     string
+	deficit     float32
+	totalUnits  float32
+	streams     map[string]Stream
+	orc         *rpc.Client
+	deficitChan chan float32
 }
 
 func (src *Source) Init(tensorShape []int, srcID string, orcAddr string, srcAddr string) {
@@ -53,24 +54,32 @@ func (src *Source) Init(tensorShape []int, srcID string, orcAddr string, srcAddr
 	src.srcID = srcID
 	src.orcAddr = orcAddr
 	src.srcAddr = srcAddr
+	src.deficitChan = make(chan float32, 5)
 }
 
 func (src *Source) updateDeficit() {
+	src.deficitChan <- src.deficit
+}
+
+func (src *Source) runDeficitUpdate() {
 	orc, err := rpc.Dial("tcp", src.orcAddr)
 	if err != nil {
 		fmt.Println("Error connecting to orchestrator: ", err)
 		return
 	}
 	defer orc.Close()
-	deficitReq := ot.SetDeficitReq{
-		SrcID:   src.srcID,
-		Deficit: src.deficit,
-	}
 	tmp := 0
-	err = orc.Call("Orchestrator.SetSourceDeficit", &deficitReq, &tmp)
-	if err != nil {
-		fmt.Println("Error setting deficit: ", err)
-		return
+	for {
+		<-src.deficitChan
+		deficitReq := ot.SetDeficitReq{
+			SrcID:   src.srcID,
+			Deficit: src.deficit,
+		}
+		err = orc.Call("Orchestrator.SetSourceDeficit", &deficitReq, &tmp)
+		if err != nil {
+			fmt.Println("Error setting deficit: ", err)
+			return
+		}
 	}
 }
 
@@ -96,16 +105,8 @@ func (src *Source) Run() {
 	}
 	fmt.Println("Registered source with orchestrator")
 
-	deficitReq := ot.SetDeficitReq{
-		SrcID:   src.srcID,
-		Deficit: float32(1.0),
-	}
-
-	err = orc.Call("Orchestrator.SetSourceDeficit", &deficitReq, &tmp)
-	if err != nil {
-		fmt.Println("Error setting source deficit: ", err)
-		return
-	}
+	src.deficit = 1.0
+	src.updateDeficit()
 
 	lastTime := time.Now()
 	var curTime time.Time
@@ -252,6 +253,7 @@ func main() {
 		panic(err)
 	}
 
+	go source.runDeficitUpdate()
 	go source.Run()
 
 	rpc.Accept(listener)
