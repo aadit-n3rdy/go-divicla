@@ -1,0 +1,39 @@
+services:
+  orchestrator:
+    build: .
+    environment:
+      - ORC_PORT=1234
+    entrypoint: ["./orchestrator/orchestrator"]
+  source:
+    build: .
+    environment:
+      - SOURCE_ADDR=source:1235
+      - SOURCE_ID=source123
+      - ORC_ADDR=orchestrator:1234
+    entrypoint: ["./source/source"]
+  server:
+    build: .
+    environment:
+      - SERVER_PORT=1236
+    entrypoint: ["./server/server"]
+  compute1:
+    build: .
+    environment:
+      - COMPUTE_PORT=1237
+      - ORC_ADDR=orchestrator:1234
+      - CANDLE_PORT=1238
+      - SERVER_ADDR=server:1236
+      - COMPUTE_ADDR=compute1:1237
+    entrypoint: "sh ./run_compute.sh"
+  compute2:
+    build: .
+    environment:
+      - COMPUTE_PORT=1237
+      - ORC_ADDR=orchestrator:1234
+      - CANDLE_PORT=1238
+      - SERVER_ADDR=server:1236
+      - COMPUTE_ADDR=compute2:1237
+    entrypoint: "sh ./run_compute.sh"
+
+
+
