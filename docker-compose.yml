@@ -46,7 +46,7 @@ services:
       - CANDLE_PORT=1238
       - SERVER_ADDR=server:1236
       - COMPUTE_ADDR=compute2:1237
-    entrypoint: "sh ./run_compute.sh"
+    entrypoint: "./compute/compute"
     deploy:
       resources:
         limits:
