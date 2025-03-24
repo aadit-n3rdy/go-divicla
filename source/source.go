@@ -115,7 +115,8 @@ func (src *Source) Run() {
 		fmt.Println("Ready to send data")
 
 		// pick a random client
-		choice := rand.Float32()
+		choice := rand.Float32() * (1.0 - src.deficit)
+		fmt.Println("Deficit:", src.deficit)
 		fmt.Println("Choice:", choice)
 		cur := float32(0.0)
 
@@ -159,7 +160,7 @@ func (src *Source) Run() {
 		curTime = time.Now()
 
 		timeDiff := curTime.Sub(lastTime).Milliseconds()
-		sleepDuration := time.Duration(1000000 * (2000 - timeDiff)) // 2ms*1000
+		sleepDuration := time.Duration(1000000 * (500 - timeDiff)) // 2ms*1000
 		fmt.Println("Sleeping for", sleepDuration)
 		time.Sleep(sleepDuration)
 
@@ -183,22 +184,26 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 		}
 		wr := bufio.NewWriter(conn)
 		accepted := min(req.Units, src.deficit)
-		src.deficit -= accepted
-		s := Stream{
-			//Client:     client,
-			writeBuf:   wr,
-			conn:       conn,
-			TotalUnits: accepted,
+		accepted = min(accepted, 0.6-val.TotalUnits)
+		if accepted > 0 {
+			src.deficit -= accepted
+			s := Stream{
+				//Client:     client,
+				writeBuf:   wr,
+				conn:       conn,
+				TotalUnits: accepted,
+			}
+			src.streams[req.Addr] = s
+			src.updateDeficit()
+			*res = accepted
+			fmt.Println("Accepted ", accepted, " units")
 		}
-		src.streams[req.Addr] = s
-		src.updateDeficit()
-		*res = accepted
-		fmt.Println("Accepted ", accepted, " units")
 		return nil
 	}
 
-	// TODO: 30% rule
+	// TODO: 60% rule
 	accepted := min(req.Units, src.deficit)
+	accepted = min(accepted, 0.6-val.TotalUnits)
 	val.TotalUnits += accepted
 	src.deficit -= accepted
 	val.TotalUnits = accepted

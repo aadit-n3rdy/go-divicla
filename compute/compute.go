@@ -3,11 +3,15 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/rpc"
 	"os"
+	"os/exec"
 	"time"
 	"unsafe"
+
+	"bitbucket.org/bertimus9/systemstat"
 
 	ot "github.com/aadit-n3rdy/go-divicla/orchestrator/types"
 	st "github.com/aadit-n3rdy/go-divicla/source/types"
@@ -22,12 +26,14 @@ type SourceDetails struct {
 
 type Compute struct {
 	orcClient   *rpc.Client
-	sources     map[string]SourceDetails
+	sources     map[string]*SourceDetails
 	candleConn  net.Conn
 	srvClient   *rpc.Client
 	taskChannel chan types.ComputeTask
 	computeAddr string
 	committed   float32
+
+	oldCPU systemstat.CPUSample
 }
 
 func (c *Compute) Init(computeAddr string, orcAddr string, candlePort string, srvAddr string) error {
@@ -36,18 +42,38 @@ func (c *Compute) Init(computeAddr string, orcAddr string, candlePort string, sr
 	if err != nil {
 		return err
 	}
-	c.sources = make(map[string]SourceDetails)
+	c.sources = make(map[string]*SourceDetails)
 	c.computeAddr = computeAddr
 	c.taskChannel = make(chan types.ComputeTask, 10)
 
-	for {
-		c.candleConn, err = net.Dial("tcp", "127.0.0.1:"+candlePort)
-		if err == nil {
-			break
-		}
-		fmt.Println("Error connecting to candle:", err)
-		time.Sleep(5 * time.Second)
+	sockpath := "/tmp/divicla_compute_" + fmt.Sprint(rand.Int()%500)
+	listener, err := net.Listen("unix", sockpath)
+	if err != nil {
+		fmt.Println("Error creating socket ", sockpath, ":", err)
+		return err
 	}
+
+	cmd := exec.Command("python3", "./py/processor.py", sockpath)
+	err = cmd.Start()
+	if err != nil {
+		fmt.Println("Error running process:", err)
+		return err
+	}
+
+	c.candleConn, err = listener.Accept()
+	if err != nil {
+		fmt.Println("Error accepting conn:", err)
+		return err
+	}
+
+	// for {
+	// 	c.candleConn, err = net.Dial("tcp", "127.0.0.1:"+candlePort)
+	// 	if err == nil {
+	// 		break
+	// 	}
+	// 	fmt.Println("Error connecting to candle:", err)
+	// 	time.Sleep(5 * time.Second)
+	// }
 
 	fmt.Println("Connected to candle")
 
@@ -59,6 +85,7 @@ func (c *Compute) Init(computeAddr string, orcAddr string, candlePort string, sr
 	}
 
 	fmt.Println("Connected to server")
+	c.oldCPU = systemstat.GetCPUSample()
 
 	return nil
 }
@@ -86,16 +113,26 @@ func tensorToWriter(te *types.Tensor, wr *bufio.Writer) {
 	wr.Flush()
 }
 
+func (c *Compute) getLoad() float32 {
+	curCPU := systemstat.GetCPUSample()
+	usage := systemstat.GetCPUAverage(c.oldCPU, curCPU)
+	c.oldCPU = curCPU
+	return 1.0 - (float32(usage.IdlePct)+float32(usage.IowaitPct))/100
+}
+
 func (c *Compute) RunController() {
 	c.committed = 0.0
 	for {
-		if c.committed < 1.0 {
+		time.Sleep(5 * time.Second)
+		usage := c.getLoad()
+		fmt.Println("CURRENT LOAD: ", usage)
+		if usage < 0.9 {
 			var tmp int
 			var node ot.OrcNode
 			err := c.orcClient.Call("Orchestrator.GetMaximumSourceDeficit", &tmp, &node)
 			if err != nil {
 				fmt.Println("Error fetching source: ", err)
-				return
+				continue
 			}
 			fmt.Println("Fetched source: ", node.ID, "@", node.Addr, " with deficit ", node.Deficit)
 			// register node with source
@@ -103,7 +140,7 @@ func (c *Compute) RunController() {
 				sourceClient, err := rpc.Dial("tcp", node.Addr)
 				if err != nil {
 					fmt.Println("Could not connect to ", node.ID, ":", err)
-					c.orcClient.Close()
+					continue
 				}
 				fmt.Println("Connected to source ", node.ID)
 
@@ -118,24 +155,48 @@ func (c *Compute) RunController() {
 					sd, ok := c.sources[node.ID]
 					if ok {
 						// already exists
-						sourceClient.Close()
+						// sourceClient.Close()
 						sd.Commitment += accepted
-						c.sources[node.ID] = sd
+						c.committed += accepted
 						fmt.Println("Increased commitment with source")
 					} else {
-						c.sources[node.ID] = SourceDetails{Addr: node.Addr, Client: sourceClient, Commitment: accepted}
+						c.sources[node.ID] = &SourceDetails{Addr: node.Addr, Client: sourceClient, Commitment: accepted}
 						c.committed += accepted
 						fmt.Println("Registered with source")
 					}
 				}
 			}
-			time.Sleep(5 * time.Second)
+		} else {
+			removeList := make([]string, 0)
+			for k, v := range c.sources {
+				redVal := v.Commitment / 2
+				if v.Commitment-redVal < 0.05 {
+					redVal = v.Commitment
+				}
+				tmp := 0
+				err := v.Client.Call("Source.ReduceStream", &st.StreamReq{
+					Addr:  c.computeAddr,
+					Units: redVal,
+				}, &tmp)
+				if err != nil {
+					fmt.Println("Error reducing stream: ", err)
+					removeList = append(removeList, k)
+				}
+				if redVal < v.Commitment {
+					// reduce commitment only if it won't be handled by removeSource
+					v.Commitment -= redVal
+				} else {
+					removeList = append(removeList, k)
+				}
+			}
+			for _, k := range removeList {
+				c.removeSource(k)
+			}
 		}
 	}
 }
 
 func (c *Compute) Run() {
-
 	wr := bufio.NewWriter(c.candleConn)
 	rd := bufio.NewReader(c.candleConn)
 
@@ -182,7 +243,7 @@ func (c *Compute) removeSource(source string) {
 func (c *Compute) ConnHandler(conn net.Conn) {
 	defer conn.Close()
 	rdr := bufio.NewReader(conn)
-	var dropped = 0
+	dropped := 0
 	srcID := ""
 	for {
 		task := types.ComputeTask{}
@@ -250,9 +311,9 @@ func main() {
 	var compute Compute
 	compute.Init(computeAddr, orcAddr, candlePort, srvAddr)
 
-	//rpcSrv := rpc.NewServer()
-	//rpc.Register(&compute)
-	//rpc.HandleHTTP()
+	// rpcSrv := rpc.NewServer()
+	// rpc.Register(&compute)
+	// rpc.HandleHTTP()
 
 	listener, err := net.Listen("tcp", ":"+port)
 	if err != nil {

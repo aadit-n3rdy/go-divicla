@@ -5,7 +5,7 @@ sys.stdout.flush()
 
 import torch
 
-print("Candle got torch") 
+print("Candle got torch")
 sys.stdout.flush()
 
 import socket
@@ -20,19 +20,26 @@ model = torch.jit.load("./models/model.pt")
 print("Loaded model")
 sys.stdout.flush()
 
-procport = int(os.getenv("CANDLE_PORT", "5678"))
+sockpath = sys.argv[1]
 
-servsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-servsock.bind(("", procport))
+# procport = int(os.getenv("CANDLE_PORT", "5678"))
 
-servsock.listen(5)
-print("Candle listening on port", procport)
-sys.stdout.flush()
+# servsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# servsock.bind(("", procport))
+
+# servsock.listen(5)
+# print("Candle listening on port", procport)
+# sys.stdout.flush()
+
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.connect(sockpath)
+
+print(f"Connected to {sockpath}", flush=True)
 
 while True:
-    sock, addr = servsock.accept()
-    print("Accepted from addr")
-    sys.stdout.flush()
+    # sock, addr = servsock.accept()
+    # print("Accepted from addr")
+    # sys.stdout.flush()
     stream = sock.makefile("rwb")
     print("Started")
     sys.stdout.flush()
