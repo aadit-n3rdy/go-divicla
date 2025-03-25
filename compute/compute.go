@@ -66,15 +66,6 @@ func (c *Compute) Init(computeAddr string, orcAddr string, candlePort string, sr
 		return err
 	}
 
-	// for {
-	// 	c.candleConn, err = net.Dial("tcp", "127.0.0.1:"+candlePort)
-	// 	if err == nil {
-	// 		break
-	// 	}
-	// 	fmt.Println("Error connecting to candle:", err)
-	// 	time.Sleep(5 * time.Second)
-	// }
-
 	fmt.Println("Connected to candle")
 
 	c.srvClient, err = rpc.Dial("tcp", srvAddr)
@@ -88,15 +79,6 @@ func (c *Compute) Init(computeAddr string, orcAddr string, candlePort string, sr
 	c.oldCPU = systemstat.GetCPUSample()
 
 	return nil
-}
-
-func tensorToTCP(te *types.Tensor, conn net.Conn) {
-	sizeStr := []byte("")
-	for _, v := range te.Sizes {
-		sizeStr = fmt.Appendf(sizeStr, "%v ", v)
-	}
-	sizeStr = append(sizeStr, '\n')
-	conn.Write(sizeStr)
 }
 
 func tensorToWriter(te *types.Tensor, wr *bufio.Writer) {
@@ -134,7 +116,7 @@ func (c *Compute) RunController() {
 				fmt.Println("Error fetching source: ", err)
 				continue
 			}
-			fmt.Println("Fetched source: ", node.ID, "@", node.Addr, " with deficit ", node.Deficit)
+			// fmt.Println("Fetched source: ", node.ID, "@", node.Addr, " with deficit ", node.Deficit)
 			// register node with source
 			if node.Deficit > 0 {
 				sourceClient, err := rpc.Dial("tcp", node.Addr)
@@ -142,7 +124,6 @@ func (c *Compute) RunController() {
 					fmt.Println("Could not connect to ", node.ID, ":", err)
 					continue
 				}
-				fmt.Println("Connected to source ", node.ID)
 
 				accepted := float32(0)
 				err = sourceClient.Call("Source.RegisterStream", &st.StreamReq{
@@ -206,10 +187,7 @@ func (c *Compute) Run() {
 			fmt.Println("Job channel closed")
 			break
 		}
-		fmt.Println("Send task ", task.ID, " to candle")
 		tensorToWriter(&task.Data, wr)
-
-		fmt.Println("Getting result for ", task.ID, " from candle")
 
 		resultLine, err := rd.ReadString('\n')
 		if err != nil {
@@ -218,17 +196,13 @@ func (c *Compute) Run() {
 		var val1, val2 float32
 		fmt.Sscanf(resultLine, "%f %f\n", &val1, &val2)
 
-		// TODO: work from here
-		// val1 := math.Float32frombits(binary.LittleEndian.Uint32(resultBuf[:4]))
-		// val2 := math.Float32frombits(binary.LittleEndian.Uint32(resultBuf[4:]))
 		result := types.ComputeResult{
 			ID:     task.ID,
 			Result: types.Tensor{Sizes: []int{1, 2}, Buffer: []float32{val1, val2}},
 		}
 		tmp := 0
-		fmt.Println("Got result for ", task.ID, " from candle")
+		fmt.Println("Calculated for", task.ID)
 		c.srvClient.Call("Server.RegisterValue", &result, &tmp)
-		fmt.Println("Sent result for ", task.ID, " to server")
 	}
 	fmt.Println("Exiting compute runner")
 }

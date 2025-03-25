@@ -15,6 +15,14 @@ import (
 	"github.com/aadit-n3rdy/go-divicla/types"
 )
 
+func min(a float32, b float32) float32 {
+	if a < b {
+		return a
+	} else {
+		return b
+	}
+}
+
 type Stream struct {
 	Client     *rpc.Client
 	conn       net.Conn
@@ -84,7 +92,6 @@ func (src *Source) runDeficitUpdate() {
 }
 
 func (src *Source) Run() {
-
 	orc, err := rpc.Dial("tcp", src.orcAddr)
 	if err != nil {
 		panic(err)
@@ -188,7 +195,7 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 		if accepted > 0 {
 			src.deficit -= accepted
 			s := Stream{
-				//Client:     client,
+				// Client:     client,
 				writeBuf:   wr,
 				conn:       conn,
 				TotalUnits: accepted,
@@ -201,15 +208,20 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 		return nil
 	}
 
-	// TODO: 60% rule
 	accepted := min(req.Units, src.deficit)
 	accepted = min(accepted, 0.6-val.TotalUnits)
+	if accepted <= 0 {
+		fmt.Println("Denied by 0.6 rule")
+		*res = 0
+		return nil
+	}
 	val.TotalUnits += accepted
 	src.deficit -= accepted
+	src.updateDeficit()
 	val.TotalUnits = accepted
 	src.streams[req.Addr] = val
 	*res = accepted
-	fmt.Println("Accepted ", accepted, " units")
+	fmt.Println("Increased to ", val.TotalUnits, " units")
 	return nil
 }
 
