@@ -262,6 +262,7 @@ func (c *Compute) Listener(listener net.Listener) {
 }
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	orcAddr, ok := os.LookupEnv("ORC_ADDR")
 	if !ok {
 		panic("ORC_ADDR env var missing")
