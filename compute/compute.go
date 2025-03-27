@@ -54,6 +54,8 @@ func (c *Compute) Init(computeAddr string, orcAddr string, candlePort string, sr
 	}
 
 	cmd := exec.Command("python3", "./py/processor.py", sockpath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	err = cmd.Start()
 	if err != nil {
 		fmt.Println("Error running process:", err)
@@ -208,7 +210,10 @@ func (c *Compute) Run() {
 }
 
 func (c *Compute) removeSource(source string) {
-	v := c.sources[source]
+	v, ok := c.sources[source]
+	if !ok {
+		return
+	}
 	c.committed -= v.Commitment
 	v.Client.Close()
 	delete(c.sources, source)

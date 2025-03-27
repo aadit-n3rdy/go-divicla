@@ -52,17 +52,13 @@ while True:
         count = 1
         for s in sizes:
             count *= s
-        inp = torch.zeros(count)
         print("CANDLE Reading values", flush=True)
-        for i in range(0, count):
-            buf = []
-            for j in range(0, 4):
-                tmp = stream.read(1)
-                while len(tmp) < 1:
-                    tmp = stream.read(1)
-                buf.extend(tmp)
-            (val,) = struct.unpack("f", bytearray(buf))
-            inp[i] = val
+        buf = []
+        while len(buf) < 4*count:
+            tmp = stream.read(4*count - len(buf))
+            buf.extend(tmp)
+        inpbuf = struct.iter_unpack("f", bytearray(buf))
+        inp = torch.tensor(inpbuf)
         print("CANDLE read values", flush=True)
         inp = inp.reshape(sizes)
         print("CANDLE running model", flush=True)
