@@ -32,7 +32,6 @@ type Compute struct {
 	srvClient   *rpc.Client
 	taskChannel chan types.ComputeTask
 	computeAddr string
-	committed   float32
 
 	oldCPU systemstat.CPUSample
 }
@@ -105,8 +104,15 @@ func (c *Compute) getLoad() float32 {
 	return 1.0 - (float32(usage.IdlePct)+float32(usage.IowaitPct))/100
 }
 
+func (c *Compute) calcCommitment() float32 {
+	commitment := float32(0)
+	for _, v := range c.sources {
+		commitment += v.Commitment
+	}
+	return commitment
+}
+
 func (c *Compute) RunController() {
-	c.committed = 0.0
 	for {
 		time.Sleep(2 * time.Second)
 		usage := c.getLoad()
@@ -141,15 +147,13 @@ func (c *Compute) RunController() {
 						// already exists
 						// sourceClient.Close()
 						sd.Commitment += accepted
-						c.committed += accepted
 						fmt.Println("Increased commitment with source")
 					} else {
 						c.sources[node.ID] = &SourceDetails{Addr: node.Addr, Client: sourceClient, Commitment: accepted}
-						c.committed += accepted
 						fmt.Println("Registered with source")
 					}
 				}
-				log.Println("Accepted, new commitment:", c.committed)
+				log.Println("Accepted, new commitment:", c.calcCommitment())
 			}
 		} else {
 			log.Println("CPU usage too high:", usage, ", reducing commitment")
@@ -178,7 +182,7 @@ func (c *Compute) RunController() {
 			for _, k := range removeList {
 				c.removeSource(k)
 			}
-			log.Println("Reduced, new commitment:", c.committed)
+			log.Println("Reduced, new commitment:", c.calcCommitment())
 		}
 	}
 }
@@ -219,7 +223,6 @@ func (c *Compute) removeSource(source string) {
 	if !ok {
 		return
 	}
-	c.committed -= v.Commitment
 	v.Client.Close()
 	delete(c.sources, source)
 }

@@ -203,7 +203,7 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 		}
 		wr := bufio.NewWriter(conn)
 		accepted := min(req.Units, src.calcDeficit())
-		accepted = min(accepted, 0.6-val.TotalUnits)
+		// accepted = min(accepted, 0.6-val.TotalUnits)
 		if accepted > 0 {
 			// src.deficit -= accepted
 			s := Stream{
@@ -220,9 +220,8 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 	}
 
 	accepted := min(req.Units, src.calcDeficit())
-	accepted = min(accepted, 0.6-val.TotalUnits)
+	// accepted = min(accepted, 0.6-val.TotalUnits)
 	if accepted <= 0 {
-		fmt.Println("Denied by 0.6 rule")
 		*res = 0
 		return nil
 	}
