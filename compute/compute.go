@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"math/rand"
 	"net"
 	"net/rpc"
@@ -107,7 +108,7 @@ func (c *Compute) getLoad() float32 {
 func (c *Compute) RunController() {
 	c.committed = 0.0
 	for {
-		time.Sleep(5 * time.Second)
+		time.Sleep(2 * time.Second)
 		usage := c.getLoad()
 		fmt.Println("CURRENT LOAD: ", usage)
 		if usage < 0.9 {
@@ -130,7 +131,7 @@ func (c *Compute) RunController() {
 				accepted := float32(0)
 				err = sourceClient.Call("Source.RegisterStream", &st.StreamReq{
 					Addr:  c.computeAddr,
-					Units: 1.0,
+					Units: 0.1,
 				}, &accepted)
 				if err != nil {
 					fmt.Println("Error registering stream: ", err)
@@ -148,8 +149,10 @@ func (c *Compute) RunController() {
 						fmt.Println("Registered with source")
 					}
 				}
+				log.Println("Accepted, new commitment:", c.committed)
 			}
 		} else {
+			log.Println("CPU usage too high:", usage, ", reducing commitment")
 			removeList := make([]string, 0)
 			for k, v := range c.sources {
 				redVal := v.Commitment / 2
@@ -176,6 +179,7 @@ func (c *Compute) RunController() {
 			for _, k := range removeList {
 				c.removeSource(k)
 			}
+			log.Println("Reduced, new commitment:", c.committed)
 		}
 	}
 }
@@ -188,6 +192,7 @@ func (c *Compute) Run() {
 		task, ok := <-c.taskChannel
 		if !ok {
 			fmt.Println("Job channel closed")
+			log.Println("Job channel closed")
 			break
 		}
 		tensorToWriter(&task.Data, wr)
@@ -263,12 +268,21 @@ func (c *Compute) Listener(listener net.Listener) {
 			break
 		}
 		fmt.Println("New connection from ", conn.RemoteAddr())
+		log.Print("New connection from ", conn.RemoteAddr())
 		go c.ConnHandler(conn)
 	}
 }
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
+	logFile, err := os.Create("compute.log")
+	if err != nil {
+		fmt.Println("Error creating logfile")
+		return
+	}
+	defer logFile.Close()
+	log.SetOutput(logFile)
 	orcAddr, ok := os.LookupEnv("ORC_ADDR")
 	if !ok {
 		panic("ORC_ADDR env var missing")
