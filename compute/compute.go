@@ -159,11 +159,10 @@ func (c *Compute) RunController() {
 				if v.Commitment-redVal < 0.05 {
 					redVal = v.Commitment
 				}
-				tmp := 0
 				err := v.Client.Call("Source.ReduceStream", &st.StreamReq{
 					Addr:  c.computeAddr,
 					Units: redVal,
-				}, &tmp)
+				}, &redVal)
 				if err != nil {
 					fmt.Println("Error reducing stream: ", err)
 					removeList = append(removeList, k)
