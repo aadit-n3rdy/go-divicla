@@ -1,0 +1,26 @@
+2025/03/28 16:28:23.686565 compute.go:273: New connection from 172.17.149.42:60840
+2025/03/28 16:28:23.686746 compute.go:156: Accepted, new commitment: 0.1
+2025/03/28 16:28:25.688568 compute.go:156: Accepted, new commitment: 0.2
+2025/03/28 16:28:27.690057 compute.go:156: Accepted, new commitment: 0.3
+2025/03/28 16:28:29.691537 compute.go:156: Accepted, new commitment: 0.4
+2025/03/28 16:28:31.693273 compute.go:156: Accepted, new commitment: 0.5
+2025/03/28 16:28:33.695388 compute.go:156: Accepted, new commitment: 0.5
+2025/03/28 16:28:35.696551 compute.go:159: CPU usage too high: 0.9712859 , reducing commitment
+2025/03/28 16:28:35.696953 compute.go:185: Reduced, new commitment: 0.25
+2025/03/28 16:28:49.709422 compute.go:159: CPU usage too high: 0.9148936 , reducing commitment
+2025/03/28 16:28:49.709802 compute.go:185: Reduced, new commitment: 0.125
+2025/03/28 16:28:51.712142 compute.go:156: Accepted, new commitment: 0.225
+2025/03/28 16:28:53.713978 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:28:55.716209 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:28:57.718933 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:28:59.721096 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:01.723557 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:03.725647 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:05.726991 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:07.729457 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:09.731341 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:11.733671 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:13.735646 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:15.738554 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:17.740916 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/28 16:29:19.743091 compute.go:156: Accepted, new commitment: 0.29999995
