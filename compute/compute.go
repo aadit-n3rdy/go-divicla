@@ -171,6 +171,7 @@ func (c *Compute) RunController() {
 				} else {
 					removeList = append(removeList, k)
 				}
+				fmt.Println("Reducing stream ", k, " to ", v.Commitment-redVal)
 			}
 			for _, k := range removeList {
 				c.removeSource(k)
