@@ -24,7 +24,6 @@ func min(a float32, b float32) float32 {
 }
 
 type Stream struct {
-	Client     *rpc.Client
 	conn       net.Conn
 	writeBuf   *bufio.Writer
 	TotalUnits float32
@@ -195,7 +194,6 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 		if accepted > 0 {
 			src.deficit -= accepted
 			s := Stream{
-				// Client:     client,
 				writeBuf:   wr,
 				conn:       conn,
 				TotalUnits: accepted,
@@ -233,8 +231,7 @@ func (src *Source) ReduceStream(req *st.StreamReq, res *float32) error {
 	if val.TotalUnits <= req.Units {
 		// remove stream
 		delete(src.streams, req.Addr)
-		val.Client.Close()
-		src.deficit -= val.TotalUnits
+		src.deficit += val.TotalUnits
 		*res = val.TotalUnits
 		return nil
 	}
