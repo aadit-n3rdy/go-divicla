@@ -1,4 +1,5 @@
 import sys
+import time
 
 print("Hello candle!")
 sys.stdout.flush()
@@ -54,9 +55,12 @@ while True:
             count *= s
         print("CANDLE Reading values", flush=True)
         buf = []
+        rd_st = time.time()
         while len(buf) < 4*count:
             tmp = stream.read(4*count - len(buf))
             buf.extend(tmp)
+        rd_end = time.time()
+        fmt.Println("candle read time (ms): ", (rd_end - rd_st)*1e3, flush=True)
         inpbuf = [x for x in struct.iter_unpack("f", bytearray(buf))]
         inp = torch.tensor(inpbuf)
         print("CANDLE read values", flush=True)

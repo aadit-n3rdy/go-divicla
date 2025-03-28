@@ -204,6 +204,7 @@ func (c *Compute) RunController() {
 }
 
 func (c *ComputeThread) RunCompute() {
+	defer fmt.Println("Exiting compute thread")
 	wr := bufio.NewWriter(c.candleConn)
 	rd := bufio.NewReader(c.candleConn)
 
