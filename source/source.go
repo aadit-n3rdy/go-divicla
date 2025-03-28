@@ -62,10 +62,12 @@ func (src *Source) Init(tensorShape []int, srcID string, orcAddr string, srcAddr
 	src.orcAddr = orcAddr
 	src.srcAddr = srcAddr
 	src.deficitChan = make(chan float32, 5)
+
+	src.updateDeficit()
 }
 
 func (src *Source) updateDeficit() {
-	src.deficitChan <- src.deficit
+	src.deficitChan <- src.calcDeficit()
 }
 
 func (src *Source) runDeficitUpdate() {
@@ -77,10 +79,10 @@ func (src *Source) runDeficitUpdate() {
 	defer orc.Close()
 	tmp := 0
 	for {
-		<-src.deficitChan
+		deficit := <-src.deficitChan
 		deficitReq := ot.SetDeficitReq{
 			SrcID:   src.srcID,
-			Deficit: src.deficit,
+			Deficit: deficit,
 		}
 		err = orc.Call("Orchestrator.SetSourceDeficit", &deficitReq, &tmp)
 		if err != nil {
@@ -90,7 +92,16 @@ func (src *Source) runDeficitUpdate() {
 	}
 }
 
+func (src *Source) calcDeficit() float32 {
+	deficit := float32(1)
+	for _, val := range src.streams {
+		deficit -= val.TotalUnits
+	}
+	return deficit
+}
+
 func (src *Source) Run() {
+	fmt.Println("Connecting to orc")
 	orc, err := rpc.Dial("tcp", src.orcAddr)
 	if err != nil {
 		panic(err)
@@ -102,6 +113,8 @@ func (src *Source) Run() {
 
 	defer orc.Close()
 
+	fmt.Println("Connected to orc")
+
 	tmp := 0
 
 	err = orc.Call("Orchestrator.RegisterSource", &regReq, &tmp)
@@ -111,7 +124,6 @@ func (src *Source) Run() {
 	}
 	fmt.Println("Registered source with orchestrator")
 
-	src.deficit = 1.0
 	src.updateDeficit()
 
 	lastTime := time.Now()
@@ -121,8 +133,9 @@ func (src *Source) Run() {
 		fmt.Println("Ready to send data")
 
 		// pick a random client
-		choice := rand.Float32() * (1.0 - src.deficit)
-		fmt.Println("Deficit:", src.deficit)
+		deficit := src.calcDeficit()
+		choice := rand.Float32() * (1.0 - deficit)
+		fmt.Println("Deficit:", deficit)
 		fmt.Println("Choice:", choice)
 		cur := float32(0.0)
 
@@ -140,7 +153,7 @@ func (src *Source) Run() {
 			}
 		}
 		if !found {
-			fmt.Println("No connected compute nodes")
+			fmt.Println("No connected compute nodes, with length ", len(src.streams))
 		} else {
 			// send data
 
@@ -157,7 +170,7 @@ func (src *Source) Run() {
 			stream.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			err = task.ToWriter(stream.writeBuf)
 			if err != nil {
-				src.deficit += stream.TotalUnits
+				// src.deficit += stream.TotalUnits
 				delete(src.streams, idx)
 				src.updateDeficit()
 			}
@@ -189,10 +202,10 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 			return err
 		}
 		wr := bufio.NewWriter(conn)
-		accepted := min(req.Units, src.deficit)
+		accepted := min(req.Units, src.calcDeficit())
 		accepted = min(accepted, 0.6-val.TotalUnits)
 		if accepted > 0 {
-			src.deficit -= accepted
+			// src.deficit -= accepted
 			s := Stream{
 				writeBuf:   wr,
 				conn:       conn,
@@ -206,17 +219,16 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 		return nil
 	}
 
-	accepted := min(req.Units, src.deficit)
+	accepted := min(req.Units, src.calcDeficit())
 	accepted = min(accepted, 0.6-val.TotalUnits)
 	if accepted <= 0 {
 		fmt.Println("Denied by 0.6 rule")
 		*res = 0
 		return nil
 	}
+	// src.deficit -= accepted
 	val.TotalUnits += accepted
-	src.deficit -= accepted
 	src.updateDeficit()
-	val.TotalUnits = accepted
 	src.streams[req.Addr] = val
 	*res = accepted
 	fmt.Println("Increased to ", val.TotalUnits, " units")
@@ -231,14 +243,15 @@ func (src *Source) ReduceStream(req *st.StreamReq, res *float32) error {
 	if val.TotalUnits <= req.Units {
 		// remove stream
 		delete(src.streams, req.Addr)
-		src.deficit += val.TotalUnits
+		// src.deficit += val.TotalUnits
 		*res = val.TotalUnits
 		return nil
 	}
 
 	reduced := min(val.TotalUnits, req.Units)
 	val.TotalUnits -= reduced
-	src.deficit += reduced
+	// src.deficit += reduced
+	src.updateDeficit()
 	src.streams[req.Addr] = val
 	*res = reduced
 
@@ -246,6 +259,7 @@ func (src *Source) ReduceStream(req *st.StreamReq, res *float32) error {
 }
 
 func main() {
+	fmt.Println("Hello world")
 	source := Source{}
 	var sourceID string
 	sourceID, ok := os.LookupEnv("SOURCE_ID")
@@ -266,6 +280,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Println("Going to start")
 
 	go source.runDeficitUpdate()
 	go source.Run()
