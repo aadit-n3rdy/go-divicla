@@ -24,26 +24,28 @@ type SourceDetails struct {
 	Commitment float32
 }
 
-type ComputeThread struct {
-	candleConn  net.Conn
-	computeChan chan types.ComputeTask
-	srvClient   *rpc.Client
-}
-
 type Compute struct {
-	orcClient       *rpc.Client
-	sources         map[string]*SourceDetails
-	srvClient       *rpc.Client
-	computeAddr     string
-	committed       float32
-	computeChannels []chan types.ComputeTask
-	lastChan        int32
-	threads         []ComputeThread
+	orcClient   *rpc.Client
+	sources     map[string]*SourceDetails
+	candleConn  net.Conn
+	srvClient   *rpc.Client
+	taskChannel chan types.ComputeTask
+	computeAddr string
+	committed   float32
 
 	oldCPU systemstat.CPUSample
 }
 
-func (c *ComputeThread) Init(taskChan chan types.ComputeTask, srvAddr string) error {
+func (c *Compute) Init(computeAddr string, orcAddr string, candlePort string, srvAddr string) error {
+	var err error
+	c.orcClient, err = rpc.Dial("tcp", orcAddr)
+	if err != nil {
+		return err
+	}
+	c.sources = make(map[string]*SourceDetails)
+	c.computeAddr = computeAddr
+	c.taskChannel = make(chan types.ComputeTask, 10)
+
 	sockpath := "/tmp/divicla_compute_" + fmt.Sprint(rand.Int()%500)
 	listener, err := net.Listen("unix", sockpath)
 	if err != nil {
@@ -66,43 +68,17 @@ func (c *ComputeThread) Init(taskChan chan types.ComputeTask, srvAddr string) er
 		return err
 	}
 
-	c.srvClient, err = rpc.Dial("tcp", srvAddr)
-	if err != nil {
-		fmt.Println("Error connecting to server:", err)
-		return err
-	}
-
 	fmt.Println("Connected to candle")
-	return nil
-}
-
-func (c *Compute) Init(computeAddr string, orcAddr string, candlePort string, srvAddr string, nThreads int32) error {
-	var err error
-	c.orcClient, err = rpc.Dial("tcp", orcAddr)
-	if err != nil {
-		return err
-	}
-	c.sources = make(map[string]*SourceDetails)
-	c.computeAddr = computeAddr
 
 	c.srvClient, err = rpc.Dial("tcp", srvAddr)
 	if err != nil {
 		c.orcClient.Close()
+		c.candleConn.Close()
 		return err
 	}
 
 	fmt.Println("Connected to server")
 	c.oldCPU = systemstat.GetCPUSample()
-
-	c.lastChan = 0
-	c.computeChannels = make([]chan types.ComputeTask, nThreads)
-	c.threads = make([]ComputeThread, nThreads)
-	for i := int32(0); i < nThreads; i++ {
-		c.computeChannels[i] = make(chan types.ComputeTask, 2)
-		c.threads[i] = ComputeThread{}
-		c.threads[i].Init(c.computeChannels[i], srvAddr)
-		go c.threads[i].RunCompute()
-	}
 
 	return nil
 }
@@ -203,13 +179,12 @@ func (c *Compute) RunController() {
 	}
 }
 
-func (c *ComputeThread) RunCompute() {
-	defer fmt.Println("Exiting compute thread")
+func (c *Compute) Run() {
 	wr := bufio.NewWriter(c.candleConn)
 	rd := bufio.NewReader(c.candleConn)
 
 	for {
-		task, ok := <-c.computeChan
+		task, ok := <-c.taskChannel
 		if !ok {
 			fmt.Println("Job channel closed")
 			break
@@ -244,15 +219,6 @@ func (c *Compute) removeSource(source string) {
 	delete(c.sources, source)
 }
 
-func (c *Compute) schedTask(task types.ComputeTask) bool {
-	c.lastChan = (c.lastChan + 1) % int32(len(c.computeChannels))
-	if len(c.computeChannels[c.lastChan]) == cap(c.computeChannels[c.lastChan]) {
-		return false
-	}
-	c.computeChannels[c.lastChan] <- task
-	return true
-}
-
 func (c *Compute) ConnHandler(conn net.Conn) {
 	defer conn.Close()
 	rdr := bufio.NewReader(conn)
@@ -270,10 +236,9 @@ func (c *Compute) ConnHandler(conn net.Conn) {
 		}
 		srcID = task.ID.SourceID
 		fmt.Println("Got a task!")
-		ok := c.schedTask(task)
-		if !ok {
-			dropped++
+		if len(c.taskChannel) == cap(c.taskChannel) {
 			fmt.Println("Channel is full, dropping task from ", task.ID)
+			dropped += 1
 			if dropped >= 5 {
 				fmt.Println("Too many dropped, breaking")
 				if srcID != "" {
@@ -284,7 +249,7 @@ func (c *Compute) ConnHandler(conn net.Conn) {
 			continue
 		}
 		dropped = 0
-		// c.taskChannel <- task
+		c.taskChannel <- task
 		fmt.Println("Pushed to channel")
 	}
 }
@@ -323,13 +288,8 @@ func main() {
 	if !ok {
 		panic("COMPUTE_ADDR env var missing")
 	}
-	nThreadsString, ok := os.LookupEnv("N_THREADS")
-	var nThreads int32 = 1
-	if ok {
-		fmt.Sscanf(nThreadsString, "%d", &nThreads)
-	}
 	var compute Compute
-	compute.Init(computeAddr, orcAddr, candlePort, srvAddr, nThreads)
+	compute.Init(computeAddr, orcAddr, candlePort, srvAddr)
 
 	// rpcSrv := rpc.NewServer()
 	// rpc.Register(&compute)
@@ -346,7 +306,7 @@ func main() {
 	//	fmt.Println("Serve exited for some reason")
 	//}()
 
-	compute.RunController()
+	go compute.RunController()
 
-	// compute.Run()
+	compute.Run()
 }
