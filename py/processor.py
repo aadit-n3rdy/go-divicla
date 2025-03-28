@@ -57,7 +57,7 @@ while True:
         while len(buf) < 4*count:
             tmp = stream.read(4*count - len(buf))
             buf.extend(tmp)
-        inpbuf = struct.iter_unpack("f", bytearray(buf))
+        inpbuf = [x for x in struct.iter_unpack("f", bytearray(buf))]
         inp = torch.tensor(inpbuf)
         print("CANDLE read values", flush=True)
         inp = inp.reshape(sizes)
