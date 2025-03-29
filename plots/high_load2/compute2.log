@@ -1,0 +1,27 @@
+2025/03/29 10:28:13.242665 compute.go:273: New connection from 172.17.149.42:58478
+2025/03/29 10:28:13.242854 compute.go:156: Accepted, new commitment: 0.1
+2025/03/29 10:28:15.245366 compute.go:156: Accepted, new commitment: 0.2
+2025/03/29 10:28:17.246736 compute.go:156: Accepted, new commitment: 0.3
+2025/03/29 10:28:19.248529 compute.go:156: Accepted, new commitment: 0.4
+2025/03/29 10:28:21.251097 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:23.253651 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:25.259187 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:27.262085 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:29.266350 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:31.277224 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:33.281218 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:35.282645 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:37.284377 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:39.289058 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:41.291457 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:43.294692 compute.go:156: Accepted, new commitment: 0.5
+2025/03/29 10:28:45.296020 compute.go:159: CPU usage too high: 0.90262175 , reducing commitment
+2025/03/29 10:28:45.296411 compute.go:185: Reduced, new commitment: 0.25
+2025/03/29 10:28:55.303091 compute.go:159: CPU usage too high: 0.94139653 , reducing commitment
+2025/03/29 10:28:55.303487 compute.go:185: Reduced, new commitment: 0.125
+2025/03/29 10:28:57.305032 compute.go:156: Accepted, new commitment: 0.225
+2025/03/29 10:28:59.308298 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/29 10:29:01.309715 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/29 10:29:03.315114 compute.go:156: Accepted, new commitment: 0.29999995
+2025/03/29 10:29:05.316400 compute.go:159: CPU usage too high: 0.91033626 , reducing commitment
+2025/03/29 10:29:05.316803 compute.go:185: Reduced, new commitment: 0.14999998
