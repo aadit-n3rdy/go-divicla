@@ -1,0 +1,3 @@
+[submodule "cpu-benchmark"]
+	path = cpu-benchmark
+	url = https://github.com/ReZeroE/cpu-benchmark
