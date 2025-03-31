@@ -15,7 +15,7 @@ isBench = False
 demoUrl = os.environ["DEMO_URL"]
 nodeName = os.environ["NODE_NAME"]
 
-def start():
+def startHandler():
     global isAlive
     global computeProc
     if not isAlive:
@@ -23,20 +23,12 @@ def start():
         isAlive = True
         print("Compute process started.")
     else:
-        print("Compute process is already running.")
-
-def stop():
-    global isAlive
-    global computeProc
-    if isAlive:
         computeProc.terminate()
         computeProc.wait()
         isAlive = False
         print("Compute process stopped.")
-    else:
-        print("Compute process is not running.")
 
-def start_bench():
+def benchHandler():
     global isBench
     global benchProc
     if not isBench:
@@ -44,25 +36,15 @@ def start_bench():
         isBench = True
         print("Benchmark process started.")
     else:
-        print("Benchmark process is already running.")
-
-def stop_bench():
-    global isBench
-    global benchProc
-    if isBench:
         benchProc.terminate()
         benchProc.wait()
         isBench = False
         print("Benchmark process stopped.")
-    else:
-        print("Benchmark process is not running.")
 
 def on_message(ws, message):
     handlers = {
-        "START": start,
-        "STOP": stop,
-        "BENCH_START": start_bench,
-        "BENCH_STOP": stop_bench,
+        "START": startHandler,
+        "BENCH": benchHandler,
     }
     hd = handlers.get(message)
     if hd:
@@ -80,20 +62,32 @@ def on_close(ws):
 
 def quit():
     global utilThread
-    stop_bench()
-    stop()
+    global isAlive
+    global computeProc
+    global benchProc
+    global isBench
+    if isAlive:
+        computeProc.terminate()
+        computeProc.wait()
+        isAlive = False
+    if isBench:
+        benchProc.terminate()
+        benchProc.wait()
+        isBench = False
+    print("Quitting...")
     exit()
 
 def sendUtil():
     global ws
     global isAlive
     global isBench
+    ws.send(f"{nodeName}")
     while True:
         cpuUtil = psutil.cpu_percent(interval=1)
-        ws.send(f"{cpuUtil},{isAlive},{isBench}")
+        ws.send(f"{cpuUtil},{int(isAlive)},{int(isBench)}")
         time.sleep(0.5)
 
-ws = websocket.WebsocketApp("wss://" + demoUrl + f"/{nodeName}", on_message = on_message, on_error = on_error, on_close = on_close)
+ws = websocket.WebsocketApp(demoUrl, on_message = on_message, on_error = on_error, on_close = on_close)
 
 utilThread = Thread(target=sendUtil, daemon=True).start()
 
