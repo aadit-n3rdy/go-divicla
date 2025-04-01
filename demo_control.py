@@ -3,7 +3,7 @@ import os
 import psutil
 import time
 import asyncio
-import websockets
+from websockets.sync.server import serve
 
 from threading import Thread
 
@@ -41,7 +41,7 @@ def benchHandler():
         isBench = False
         print("Benchmark process stopped.")
 
-async def handle_message(websocket, message):
+def handle_message(websocket, message):
     handlers = {
         "START": startHandler,
         "BENCH": benchHandler,
@@ -52,7 +52,7 @@ async def handle_message(websocket, message):
     else:
         print(f"Unknown message: {message}")
 
-async def quit():
+def quit():
     global isAlive
     global computeProc
     global benchProc
@@ -68,27 +68,25 @@ async def quit():
     print("Quitting...")
     exit()
 
-async def sendUtil(websocket):
+def sendUtil(websocket):
     global isAlive
     global isBench
-    await websocket.send(f"{nodeName}")
+    websocket.send(f"{nodeName}")
     while True:
         cpuUtil = psutil.cpu_percent(interval=1)
-        await websocket.send(f"{cpuUtil},{int(isAlive)},{int(isBench)}")
-        await asyncio.sleep(0.5)
+        websocket.send(f"{cpuUtil},{int(isAlive)},{int(isBench)}")
+        time.sleep(0.5)
 
-async def handler(websocket, path):
+def handler(websocket, path):
     global utilThread
-    utilThread = Thread(target=lambda: asyncio.run(sendUtil(websocket)), daemon=True)
+    utilThread = Thread(target=sendUtil, args=(websocket,))
     utilThread.start()
     try:
-        async for message in websocket:
-            await handle_message(websocket, message)
-    except websockets.exceptions.ConnectionClosed as e:
+        for message in websocket:
+            handle_message(websocket, message)
+    except Exception as e:
         print(f"Connection closed: {e}")
-        await quit()
+        quit()
 
-start_server = websockets.serve(handler, "0.0.0.0", 6000)
-
-asyncio.get_event_loop().run_until_complete(start_server)
-asyncio.get_event_loop().run_forever()
+with serve(handler, "0.0.0.0", 6000) as server:
+    server.serve_forever()
