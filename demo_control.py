@@ -1,8 +1,9 @@
 import subprocess
 import os
-import websocket, ssl
 import psutil
 import time
+import asyncio
+import websockets
 
 from threading import Thread
 
@@ -12,7 +13,6 @@ isAlive = True
 benchProc = None
 isBench = False
 
-demoUrl = os.environ["DEMO_URL"]
 nodeName = os.environ["NODE_NAME"]
 
 def startHandler():
@@ -41,7 +41,7 @@ def benchHandler():
         isBench = False
         print("Benchmark process stopped.")
 
-def on_message(ws, message):
+async def handle_message(websocket, message):
     handlers = {
         "START": startHandler,
         "BENCH": benchHandler,
@@ -52,16 +52,7 @@ def on_message(ws, message):
     else:
         print(f"Unknown message: {message}")
 
-def on_error(ws, error):
-    print(f"Error: {error}")
-    quit()
-
-def on_close(ws):
-    print("WebSocket closed")
-    quit()
-
-def quit():
-    global utilThread
+async def quit():
     global isAlive
     global computeProc
     global benchProc
@@ -77,19 +68,27 @@ def quit():
     print("Quitting...")
     exit()
 
-def sendUtil():
-    global ws
+async def sendUtil(websocket):
     global isAlive
     global isBench
-    ws.send(f"{nodeName}")
+    await websocket.send(f"{nodeName}")
     while True:
         cpuUtil = psutil.cpu_percent(interval=1)
-        ws.send(f"{cpuUtil},{int(isAlive)},{int(isBench)}")
-        time.sleep(0.5)
+        await websocket.send(f"{cpuUtil},{int(isAlive)},{int(isBench)}")
+        await asyncio.sleep(0.5)
 
-ws = websocket.WebsocketApp(demoUrl, on_message = on_message, on_error = on_error, on_close = on_close)
+async def handler(websocket, path):
+    global utilThread
+    utilThread = Thread(target=lambda: asyncio.run(sendUtil(websocket)), daemon=True)
+    utilThread.start()
+    try:
+        async for message in websocket:
+            await handle_message(websocket, message)
+    except websockets.exceptions.ConnectionClosed as e:
+        print(f"Connection closed: {e}")
+        await quit()
 
-utilThread = Thread(target=sendUtil, daemon=True).start()
+start_server = websockets.serve(handler, "0.0.0.0", 6000)
 
-ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})  
-
+asyncio.get_event_loop().run_until_complete(start_server)
+asyncio.get_event_loop().run_forever()
