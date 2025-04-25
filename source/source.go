@@ -233,13 +233,13 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 	return nil
 }
 
-func (src *Source) GetCache(req *time.Time, res *[]types.Tensor) error {
+func (src *Source) GetCache(req *time.Time, res *types.Tensor) error {
 	task := src.cache.Get(*req)
 	if task == nil {
 		return errors.New("Cache miss")
 	}
-	res.Sizes = task.Data.Sizes
-	res.Buffer = task.Data.Buffer
+	*res = task.Data
+	return nil
 }
 
 func (src *Source) ReduceStream(req *st.StreamReq, res *float32) error {
