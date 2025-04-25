@@ -15,6 +15,7 @@ isBench = False
 
 nodeName = os.environ["NODE_NAME"]
 
+
 def startHandler():
     global isAlive
     global computeProc
@@ -27,6 +28,7 @@ def startHandler():
         computeProc.wait()
         isAlive = False
         print("Compute process stopped.")
+
 
 def benchHandler():
     global isBench
@@ -41,6 +43,7 @@ def benchHandler():
         isBench = False
         print("Benchmark process stopped.")
 
+
 def handle_message(websocket, message):
     handlers = {
         "START": startHandler,
@@ -51,6 +54,7 @@ def handle_message(websocket, message):
         hd()
     else:
         print(f"Unknown message: {message}")
+
 
 def quit():
     global isAlive
@@ -68,6 +72,7 @@ def quit():
     print("Quitting...")
     exit()
 
+
 def sendUtil(websocket):
     global isAlive
     global isBench
@@ -77,7 +82,8 @@ def sendUtil(websocket):
         websocket.send(f"{cpuUtil},{int(isAlive)},{int(isBench)}")
         time.sleep(0.5)
 
-def handler(websocket, path):
+
+def handler(websocket):
     global utilThread
     utilThread = Thread(target=sendUtil, args=(websocket,))
     utilThread.start()
@@ -88,5 +94,7 @@ def handler(websocket, path):
         print(f"Connection closed: {e}")
         quit()
 
+
 with serve(handler, "0.0.0.0", 6000) as server:
     server.serve_forever()
+
