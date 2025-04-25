@@ -13,7 +13,7 @@ df2 = pd.read_csv(csv2)
 
 def transform_dataframe(df, start_time, smoothing):
     newdf = df.copy()
-    newdf["timestamp"] = (pd.to_datetime(newdf["Timestamp"]) - pd.to_datetime(start_time)).dt.total_seconds()
+    newdf["timestamp"] = (pd.to_datetime(newdf["Timestamp"]) - pd.to_datetime(start_time)).dt.total_seconds() - 10
     newdf["util"] = newdf["CPU_Utilization(%)"].rolling(smoothing).mean()
     # conv = np.ones(smoothing)*0.9/(smoothing-1)
     # conv[-1] = 0.1
@@ -24,21 +24,23 @@ def transform_dataframe(df, start_time, smoothing):
 
 # Convert the Timestamp column to datetime format
 minTS = min(df1["Timestamp"].min(), df2["Timestamp"].min())
-smoothing = 10
+smoothing = 30
 
 df1 = transform_dataframe(df1, minTS, smoothing)
 df2 = transform_dataframe(df2, minTS, smoothing)
 
-df1.to_csv("corepi2_transformed.csv", index=False)
-df2.to_csv("corepi3_transformed.csv", index=False)
+df1.dropna(inplace=True)
+df2.dropna(inplace=True)
 
-df = pd.merge(df1, df2, , how="outer")
-df = df.rename(columns={"util_x": "util1", "util_y": "util2"})
-df = df.dropna()
+df1.to_csv("corepi2_fail_transformed.csv", index=False)
+df2.to_csv("corepi3_fail_transformed.csv", index=False)
 
+print(df1.head())
+print(df2.head())
 
 # Plot the data
 plt.figure(figsize=(10, 5))
+plt.xlim(0, 95)
 plt.plot(df1["timestamp"], df1["util"], label="Node 1", color="b")
 plt.plot(df2["timestamp"], df2["util"], label="Node 2", color="g")
 

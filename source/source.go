@@ -39,6 +39,7 @@ type Source struct {
 	streams     map[string]Stream
 	orc         *rpc.Client
 	deficitChan chan float32
+	cache       Cache
 }
 
 func (src *Source) Init(tensorShape []int, srcID string, orcAddr string, srcAddr string) {
@@ -64,6 +65,8 @@ func (src *Source) Init(tensorShape []int, srcID string, orcAddr string, srcAddr
 	src.deficitChan = make(chan float32, 5)
 
 	src.updateDeficit()
+
+	src.cache.Init(32)
 }
 
 func (src *Source) updateDeficit() {
@@ -130,6 +133,9 @@ func (src *Source) Run() {
 	var curTime time.Time
 
 	for {
+		for i := range src.inpTensor.Buffer {
+			src.inpTensor.Buffer[i] = rand.Float32()
+		}
 		fmt.Println("Ready to send data")
 
 		// pick a random client
@@ -158,14 +164,15 @@ func (src *Source) Run() {
 			// send data
 
 			fmt.Println("Found node")
-
+			ts := time.Now()
 			task := types.ComputeTask{
 				ID: types.ComputeID{
 					SourceID:  src.srcID,
-					Timestamp: time.Now(),
+					Timestamp: ts,
 				},
 				Data: src.inpTensor,
 			}
+			src.cache.Insert(&task)
 			fmt.Println("Sending task")
 			stream.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			err = task.ToWriter(stream.writeBuf)
@@ -191,11 +198,6 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 	val, ok := src.streams[req.Addr]
 	fmt.Println("Registering stream for ", req.Addr)
 	if !ok {
-		//client, err := rpc.Dial("tcp", req.Addr)
-		//if err != nil {
-		//	fmt.Println("Error connecting to compute node @ ", req.Addr, ": ", err)
-		//	return err
-		//}
 		conn, err := net.Dial("tcp", req.Addr)
 		if err != nil {
 			fmt.Println("Error connecting to compute node @ ", req.Addr, ": ", err)
@@ -203,9 +205,7 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 		}
 		wr := bufio.NewWriter(conn)
 		accepted := min(req.Units, src.calcDeficit())
-		// accepted = min(accepted, 0.6-val.TotalUnits)
 		if accepted > 0 {
-			// src.deficit -= accepted
 			s := Stream{
 				writeBuf:   wr,
 				conn:       conn,
@@ -220,7 +220,6 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 	}
 
 	accepted := min(req.Units, src.calcDeficit())
-	// accepted = min(accepted, 0.6-val.TotalUnits)
 	if accepted <= 0 {
 		*res = 0
 		return nil
@@ -232,6 +231,15 @@ func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
 	*res = accepted
 	fmt.Println("Increased to ", val.TotalUnits, " units")
 	return nil
+}
+
+func (src *Source) GetCache(req *time.Time, res *[]types.Tensor) error {
+	task := src.cache.Get(*req)
+	if task == nil {
+		return errors.New("Cache miss")
+	}
+	res.Sizes = task.Data.Sizes
+	res.Buffer = task.Data.Buffer
 }
 
 func (src *Source) ReduceStream(req *st.StreamReq, res *float32) error {

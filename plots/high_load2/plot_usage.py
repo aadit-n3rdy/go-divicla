@@ -29,9 +29,14 @@ smoothing = 30
 df1 = transform_dataframe(df1, minTS, smoothing)
 df2 = transform_dataframe(df2, minTS, smoothing)
 
-df1.to_csv("corepi2_transformed.csv", index=False)
-df2.to_csv("corepi3_transformed.csv", index=False)
+df1.dropna(inplace=True)
+df2.dropna(inplace=True)
 
+df1.to_csv("corepi2_high_transformed.csv", index=False)
+df2.to_csv("corepi3_high_transformed.csv", index=False)
+
+print(df1.head())
+print(df2.head())
 
 # Plot the data
 plt.figure(figsize=(10, 5))
