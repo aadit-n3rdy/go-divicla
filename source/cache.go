@@ -7,7 +7,6 @@ import (
 )
 
 type Cache struct {
-	count     int32
 	maxSize   int32
 	tasks     []types.ComputeTask
 	headIndex int32
@@ -16,22 +15,19 @@ type Cache struct {
 func (c *Cache) Init(maxSize int32) {
 	c.maxSize = maxSize
 	c.headIndex = 0
+	c.tasks = make([]types.ComputeTask, maxSize)
 }
 
 func copyTensor(dest *types.Tensor, src *types.Tensor) {
 	if len(dest.Sizes) != len(src.Sizes) {
 		dest.Sizes = make([]int, len(src.Sizes))
 	}
-	for i := range src.Sizes {
-		dest.Sizes[i] = src.Sizes[i]
-	}
+	copy(dest.Sizes, src.Sizes)
 
 	if len(dest.Buffer) != len(src.Buffer) {
 		dest.Buffer = make([]float32, len(src.Buffer))
 	}
-	for i := range src.Buffer {
-		dest.Buffer[i] = src.Buffer[i]
-	}
+	copy(dest.Buffer, src.Buffer)
 }
 
 func (c *Cache) Insert(task *types.ComputeTask) {
