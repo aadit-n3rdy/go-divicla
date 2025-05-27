@@ -15,7 +15,6 @@ import (
 	"bitbucket.org/bertimus9/systemstat"
 
 	ot "github.com/aadit-n3rdy/go-divicla/orchestrator/types"
-	st "github.com/aadit-n3rdy/go-divicla/source/types"
 	"github.com/aadit-n3rdy/go-divicla/types"
 )
 
@@ -114,75 +113,17 @@ func (c *Compute) calcCommitment() float32 {
 
 func (c *Compute) RunController() {
 	for {
+		// Update CPU usage every 2 seconds
 		time.Sleep(2 * time.Second)
 		usage := c.getLoad()
-		fmt.Println("CURRENT LOAD: ", usage)
-		if usage < 0.9 {
-			var tmp int
-			var node ot.OrcNode
-			err := c.orcClient.Call("Orchestrator.GetMaximumSourceDeficit", &tmp, &node)
-			if err != nil {
-				fmt.Println("Error fetching source: ", err)
-				continue
-			}
-			// fmt.Println("Fetched source: ", node.ID, "@", node.Addr, " with deficit ", node.Deficit)
-			// register node with source
-			if node.Deficit > 0 {
-				sourceClient, err := rpc.Dial("tcp", node.Addr)
-				if err != nil {
-					fmt.Println("Could not connect to ", node.ID, ":", err)
-					continue
-				}
 
-				accepted := float32(0)
-				err = sourceClient.Call("Source.RegisterStream", &st.StreamReq{
-					Addr:  c.computeAddr,
-					Units: 0.1,
-				}, &accepted)
-				if err != nil {
-					fmt.Println("Error registering stream: ", err)
-				} else if accepted > 0 {
-					sd, ok := c.sources[node.ID]
-					if ok {
-						// already exists
-						// sourceClient.Close()
-						sd.Commitment += accepted
-						fmt.Println("Increased commitment with source")
-					} else {
-						c.sources[node.ID] = &SourceDetails{Addr: node.Addr, Client: sourceClient, Commitment: accepted}
-						fmt.Println("Registered with source")
-					}
-				}
-				log.Println("Accepted, new commitment:", c.calcCommitment())
-			}
-		} else {
-			log.Println("CPU usage too high:", usage, ", reducing commitment")
-			removeList := make([]string, 0)
-			for k, v := range c.sources {
-				redVal := v.Commitment / 2
-				if v.Commitment-redVal < 0.05 {
-					redVal = v.Commitment
-				}
-				err := v.Client.Call("Source.ReduceStream", &st.StreamReq{
-					Addr:  c.computeAddr,
-					Units: redVal,
-				}, &redVal)
-				if err != nil {
-					fmt.Println("Error reducing stream: ", err)
-					removeList = append(removeList, k)
-				}
-				if redVal < v.Commitment {
-					// reduce commitment only if it won't be handled by removeSource
-					v.Commitment -= redVal
-				} else {
-					removeList = append(removeList, k)
-				}
-				fmt.Println("Reducing stream ", k, " to ", v.Commitment-redVal)
-			}
-			for _, k := range removeList {
-				c.removeSource(k)
-			}
-			log.Println("Reduced, new commitment:", c.calcCommitment())
+		var res float32
+		err := c.orcClient.Call("Orchestrator.SetComputeUtil", &ot.SetUtilReq{
+			ComputeID: c.computeAddr, Util: usage,
+		}, &res)
+		if err != nil {
+			fmt.Println("Error setting compute utilization: ", err)
+			continue
 		}
 	}
 }

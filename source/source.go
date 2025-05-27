@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	ot "github.com/aadit-n3rdy/go-divicla/orchestrator/types"
-	st "github.com/aadit-n3rdy/go-divicla/source/types"
 	"github.com/aadit-n3rdy/go-divicla/types"
 )
 
@@ -187,73 +185,48 @@ func (src *Source) Run() {
 	}
 }
 
-func (src *Source) RegisterStream(req *st.StreamReq, res *float32) error {
-	val, ok := src.streams[req.Addr]
-	fmt.Println("Registering stream for ", req.Addr)
-	if !ok {
-		//client, err := rpc.Dial("tcp", req.Addr)
-		//if err != nil {
-		//	fmt.Println("Error connecting to compute node @ ", req.Addr, ": ", err)
-		//	return err
-		//}
-		conn, err := net.Dial("tcp", req.Addr)
-		if err != nil {
-			fmt.Println("Error connecting to compute node @ ", req.Addr, ": ", err)
-			return err
+func (src *Source) RegisterCommitments(req *map[string]float32, res *float32) error {
+	// req: map from compute addr to commitment
+	tbd := make([]string, 0)
+	for k, _ := range src.streams {
+		_, ok := (*req)[k]
+		if !ok {
+			tbd = append(tbd, k)
 		}
-		wr := bufio.NewWriter(conn)
-		accepted := min(req.Units, src.calcDeficit())
-		// accepted = min(accepted, 0.6-val.TotalUnits)
-		if accepted > 0 {
-			// src.deficit -= accepted
+	}
+
+	// remove all keys from src.streams which are in tbd
+	for _, k := range tbd {
+		src.streams[k].conn.Close()
+		src.streams[k].writeBuf.Flush()
+		delete(src.streams, k)
+	}
+
+	for k, v := range src.streams {
+		v.TotalUnits = 0
+		src.streams[k] = v
+	}
+	for comp, newComm := range *req {
+		oldval, ok := src.streams[comp]
+		if ok {
+			oldval.TotalUnits = newComm
+			src.streams[comp] = oldval
+		} else {
+			conn, err := net.Dial("tcp", comp)
+			if err != nil {
+				fmt.Println("Error connecting to compute node @ ", comp, ": ", err)
+				return err
+			}
+			wr := bufio.NewWriter(conn)
+			units := newComm
 			s := Stream{
 				writeBuf:   wr,
 				conn:       conn,
-				TotalUnits: accepted,
+				TotalUnits: units,
 			}
-			src.streams[req.Addr] = s
-			src.updateDeficit()
-			*res = accepted
-			fmt.Println("Accepted ", accepted, " units")
+			src.streams[comp] = s
 		}
-		return nil
 	}
-
-	accepted := min(req.Units, src.calcDeficit())
-	// accepted = min(accepted, 0.6-val.TotalUnits)
-	if accepted <= 0 {
-		*res = 0
-		return nil
-	}
-	// src.deficit -= accepted
-	val.TotalUnits += accepted
-	src.updateDeficit()
-	src.streams[req.Addr] = val
-	*res = accepted
-	fmt.Println("Increased to ", val.TotalUnits, " units")
-	return nil
-}
-
-func (src *Source) ReduceStream(req *st.StreamReq, res *float32) error {
-	val, ok := src.streams[req.Addr]
-	if !ok {
-		return errors.New("unknown compute node " + req.Addr)
-	}
-	if val.TotalUnits <= req.Units {
-		// remove stream
-		delete(src.streams, req.Addr)
-		// src.deficit += val.TotalUnits
-		*res = val.TotalUnits
-		return nil
-	}
-
-	reduced := min(val.TotalUnits, req.Units)
-	val.TotalUnits -= reduced
-	// src.deficit += reduced
-	src.updateDeficit()
-	src.streams[req.Addr] = val
-	*res = reduced
-
 	return nil
 }
 

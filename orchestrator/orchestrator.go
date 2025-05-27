@@ -6,21 +6,45 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"time"
 
 	ot "github.com/aadit-n3rdy/go-divicla/orchestrator/types"
 )
 
 type Orchestrator struct {
-	Nodes map[string]ot.OrcNode
+	Nodes    map[string]ot.OrcNode
+	Computes map[string]ot.CompNode // Map address to CPU util
+	NodeList []string
+	CompList []string
 }
 
 func (orc *Orchestrator) Init() {
 	orc.Nodes = make(map[string]ot.OrcNode)
+	orc.Computes = make(map[string]ot.CompNode)
+	orc.NodeList = make([]string, 0)
+	orc.CompList = make([]string, 0)
 }
 
 func (orc *Orchestrator) RegisterSource(req *ot.RegSourceReq, res *int) error {
 	orc.Nodes[req.SrcID] = ot.OrcNode{ID: req.SrcID, Deficit: 0, Addr: req.Addr}
+	orc.NodeList = append(orc.NodeList, req.SrcID)
+	*res = 0
 	fmt.Println("Registered source ", req.SrcID, "@", req.Addr)
+	return nil
+}
+
+func (orc *Orchestrator) RegisterCompute(req *ot.RegCompReq, res *int) error {
+	orc.Computes[req.Addr] = ot.CompNode{Util: 0.0, Capacity: req.Capacity, Commitment: 0.0}
+	orc.CompList = append(orc.CompList, req.Addr)
+	*res = 0
+	return nil
+}
+
+func (orc *Orchestrator) SetComputeUtil(req *ot.SetUtilReq, res *int) error {
+	cur := orc.Computes[req.ComputeID]
+	cur.Util = req.Util
+	orc.Computes[req.ComputeID] = cur
+	*res = 0
 	return nil
 }
 
@@ -53,6 +77,50 @@ func (orc *Orchestrator) GetMaximumSourceDeficit(_ *int, res *ot.OrcNode) error 
 	return nil
 }
 
+func (orc *Orchestrator) runController() {
+	for {
+		// construct problem
+		// solve using GA
+		// distribute results
+		time.Sleep(2000 * time.Millisecond)
+
+		eaOrc = orc
+		best, err := RunEA()
+
+		if err != nil {
+			fmt.Println("Error running EA: ", err)
+			continue
+		}
+
+		for i := 0; i < len(orc.NodeList); i++ {
+			nodeID := orc.NodeList[i]
+			// Send commitments to each node
+			node, ok := orc.Nodes[nodeID]
+			if !ok {
+				fmt.Println("Node not found: ", nodeID)
+				continue
+			}
+			commitments := make(map[string]float32, len(orc.CompList))
+			for j := 0; j < len(orc.CompList); j++ {
+				commitments[orc.CompList[j]] = float32(best[i*len(orc.CompList)+j])
+			}
+			conn, err := rpc.Dial("tcp", node.Addr)
+			if err != nil {
+				fmt.Println("Error connecting to node ", nodeID, ": ", err)
+				continue
+			}
+			var res float32
+			err = conn.Call("Source.SetCommitments", &commitments, &res)
+			defer conn.Close()
+
+			if err != nil {
+				fmt.Println("Error setting commitments for node ", nodeID, ": ", err)
+				continue
+			}
+		}
+	}
+}
+
 func main() {
 	orcPort, ok := os.LookupEnv("ORC_PORT")
 	if !ok {
@@ -61,6 +129,8 @@ func main() {
 
 	orc := Orchestrator{}
 	orc.Init()
+
+	go orc.runController()
 
 	rpc.Register(&orc)
 	rpc.HandleHTTP()
