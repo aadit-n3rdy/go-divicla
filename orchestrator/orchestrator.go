@@ -100,9 +100,17 @@ func (orc *Orchestrator) runController() {
 				fmt.Println("Node not found: ", nodeID)
 				continue
 			}
+			for _, k := range orc.CompList {
+				v := orc.Computes[k]
+				v.Commitment = 0
+				orc.Computes[k] = v
+			}
 			commitments := make(map[string]float32, len(orc.CompList))
 			for j := 0; j < len(orc.CompList); j++ {
 				commitments[orc.CompList[j]] = float32(best[i*len(orc.CompList)+j])
+				cobj := orc.Computes[orc.CompList[j]]
+				cobj.Commitment = commitments[orc.CompList[j]]
+				orc.Computes[orc.CompList[j]] = cobj
 			}
 			conn, err := rpc.Dial("tcp", node.Addr)
 			if err != nil {
@@ -111,12 +119,11 @@ func (orc *Orchestrator) runController() {
 			}
 			var res float32
 			err = conn.Call("Source.SetCommitments", &commitments, &res)
-			defer conn.Close()
-
 			if err != nil {
 				fmt.Println("Error setting commitments for node ", nodeID, ": ", err)
 				continue
 			}
+			conn.Close()
 		}
 	}
 }
